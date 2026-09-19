@@ -13,6 +13,7 @@ import (
 
 	"github.com/jollyhub8278/multi-window-media-sequencer/backend/internal/config"
 	"github.com/jollyhub8278/multi-window-media-sequencer/backend/internal/handlers"
+	"github.com/jollyhub8278/multi-window-media-sequencer/backend/internal/realtime"
 	"github.com/jollyhub8278/multi-window-media-sequencer/backend/internal/repository"
 	"github.com/jollyhub8278/multi-window-media-sequencer/backend/internal/seed"
 )
@@ -39,6 +40,9 @@ func main() {
 		"Connected to MongoDB database: %s",
 		database.Name(),
 	)
+
+	hub := realtime.NewHub(os.Getenv("FRONTEND_URL"))
+	syncHandler := handlers.NewSyncHandler(database, hub)
 
 	if err := seed.Database(context.Background(), database); err != nil {
 		log.Fatal("Failed to seed database:", err)
@@ -93,6 +97,9 @@ func main() {
 		"/windows/:windowId/playlist-items",
 		apiHandler.AddPlaylistItem,
 	)
+	api.POST("/sync", syncHandler.StartSync)
+	api.GET("/sync/active", syncHandler.GetActiveSync)
+	router.GET("/ws", hub.ServeWS)
 
 	port := os.Getenv("PORT")
 	if port == "" {

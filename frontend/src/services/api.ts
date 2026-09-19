@@ -1,6 +1,7 @@
 import type {
   DisplayWindow,
   MediaItem,
+  SyncPlayback,
 } from "../types/media";
 
 const API_URL =
@@ -63,4 +64,24 @@ export function addPlaylistItem(
       }),
     },
   );
+}
+
+export function startSync(
+  mediaId: string,
+  durationSeconds: number,
+): Promise<SyncPlayback> {
+  return request<SyncPlayback>("/sync", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      mediaId,
+      durationSeconds,
+    }),
+  });
+}
+
+export function getActiveSync(): Promise<SyncPlayback | null> {
+  return request<SyncPlayback | null>("/sync/active");
 }

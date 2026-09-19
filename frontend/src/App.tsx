@@ -1,34 +1,60 @@
 import { useEffect, useState } from "react";
+
 import "./App.css";
-import MediaWindow from "./components/MediaWindow";
-// import { getMedia, getWindows } from "./services/api";
-import type { DisplayWindow, MediaItem } from "./types/media";
 import AddMediaForm from "./components/AddMediaForm";
-import { addPlaylistItem, getMedia, getWindows } from "./services/api";
-interface ActiveSync {
-  media: MediaItem;
-  endsAt: number;
-}
+import MediaWindow from "./components/MediaWindow";
+import { useSyncPlayback } from "./hooks/useSyncPlayback";
+import {
+  addPlaylistItem,
+  getMedia,
+  getWindows,
+} from "./services/api";
+
+import type {
+  DisplayWindow,
+  MediaItem,
+} from "./types/media";
 
 function App() {
-  const [displayWindows, setDisplayWindows] = useState<DisplayWindow[]>([]);
+  const [displayWindows, setDisplayWindows] =
+    useState<DisplayWindow[]>([]);
 
-  const [mediaLibrary, setMediaLibrary] = useState<MediaItem[]>([]);
+  const [mediaLibrary, setMediaLibrary] =
+    useState<MediaItem[]>([]);
 
-  const [selectedMediaId, setSelectedMediaId] = useState("");
+  const [selectedMediaId, setSelectedMediaId] =
+    useState("");
 
-  const [syncDuration, setSyncDuration] = useState(10);
-  const [activeSync, setActiveSync] = useState<ActiveSync | null>(null);
+  const [syncDuration, setSyncDuration] =
+    useState(10);
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [isLoading, setIsLoading] =
+    useState(true);
+
+  const [isSyncStarting, setIsSyncStarting] =
+    useState(false);
+
+  const [errorMessage, setErrorMessage] =
+    useState("");
+
+  const [syncErrorMessage, setSyncErrorMessage] =
+    useState("");
+
+  const {
+    activeSync,
+    isSocketConnected,
+    triggerSync,
+  } = useSyncPlayback();
 
   useEffect(() => {
     let isCancelled = false;
 
     async function loadApplicationData() {
       try {
-        const [windows, media] = await Promise.all([getWindows(), getMedia()]);
+        const [windows, media] = await Promise.all([
+          getWindows(),
+          getMedia(),
+        ]);
 
         if (!isCancelled) {
           setDisplayWindows(windows);
@@ -57,48 +83,42 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!activeSync) {
-      return;
-    }
-
-    const remainingTime = Math.max(activeSync.endsAt - Date.now(), 0);
-
-    const timer = window.setTimeout(() => {
-      setActiveSync(null);
-    }, remainingTime);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [activeSync]);
-
   const totalPlaylistItems = displayWindows.reduce(
-    (total, windowData) => total + windowData.playlist.length,
+    (total, windowData) =>
+      total + windowData.playlist.length,
     0,
   );
 
-  const effectiveSelectedMediaId = selectedMediaId || mediaLibrary[0]?.id || "";
+  const effectiveSelectedMediaId =
+    selectedMediaId || mediaLibrary[0]?.id || "";
 
-  function handleStartSync() {
-    const selectedMedia = mediaLibrary.find(
-      (media) => media.id === effectiveSelectedMediaId,
-    );
-
-    if (!selectedMedia) {
+  async function handleStartSync() {
+    if (!effectiveSelectedMediaId) {
       return;
     }
 
-    const validDuration = Math.max(syncDuration, 1);
+    const validDuration = Math.max(
+      syncDuration,
+      1,
+    );
 
-    setActiveSync({
-      media: selectedMedia,
-      endsAt: Date.now() + validDuration * 1000,
-    });
-  }
+    setIsSyncStarting(true);
+    setSyncErrorMessage("");
 
-  function handleStopSync() {
-    setActiveSync(null);
+    try {
+      await triggerSync(
+        effectiveSelectedMediaId,
+        validDuration,
+      );
+    } catch (error) {
+      setSyncErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to start synchronized playback",
+      );
+    } finally {
+      setIsSyncStarting(false);
+    }
   }
 
   async function handleAddMedia(
@@ -106,7 +126,11 @@ function App() {
     mediaID: string,
     duration: number,
   ) {
-    await addPlaylistItem(windowID, mediaID, duration);
+    await addPlaylistItem(
+      windowID,
+      mediaID,
+      duration,
+    );
 
     const updatedWindows = await getWindows();
     setDisplayWindows(updatedWindows);
@@ -116,20 +140,32 @@ function App() {
     <main className="app-shell">
       <header className="app-header">
         <div>
-          <p className="eyebrow">Playback dashboard</p>
+          <p className="eyebrow">
+            Playback dashboard
+          </p>
 
           <h1>Multi-Window Media Sequencer</h1>
 
           <p className="header-description">
-            Independent playlists with continuous playback and a five-hour
-            cycle.
+            Independent playlists with continuous
+            playback and a five-hour cycle.
           </p>
         </div>
 
         <div className="system-status">
-          <span className="status-dot" />
+          <span
+            className={
+              isSocketConnected
+                ? "status-dot"
+                : "status-dot status-dot--offline"
+            }
+          />
 
-          {activeSync ? "Sync playback active" : "Backend connected"}
+          {activeSync
+            ? "Sync playback active"
+            : isSocketConnected
+              ? "Real-time connected"
+              : "Real-time reconnecting"}
         </div>
       </header>
 
@@ -151,12 +187,16 @@ function App() {
           <section className="summary-grid">
             <div className="summary-card">
               <span>Display windows</span>
-              <strong>{displayWindows.length}</strong>
+              <strong>
+                {displayWindows.length}
+              </strong>
             </div>
 
             <div className="summary-card">
               <span>Playlist items</span>
-              <strong>{totalPlaylistItems}</strong>
+              <strong>
+                {totalPlaylistItems}
+              </strong>
             </div>
 
             <div className="summary-card">
@@ -174,7 +214,10 @@ function App() {
           <section className="sync-panel">
             <div className="sync-panel-heading">
               <div>
-                <p className="eyebrow">Global override</p>
+                <p className="eyebrow">
+                  Global override
+                </p>
+
                 <h2>Sync Playback</h2>
               </div>
 
@@ -191,11 +234,21 @@ function App() {
 
                 <select
                   value={effectiveSelectedMediaId}
-                  disabled={activeSync !== null}
-                  onChange={(event) => setSelectedMediaId(event.target.value)}
+                  disabled={
+                    activeSync !== null ||
+                    isSyncStarting
+                  }
+                  onChange={(event) =>
+                    setSelectedMediaId(
+                      event.target.value,
+                    )
+                  }
                 >
                   {mediaLibrary.map((media) => (
-                    <option key={media.id} value={media.id}>
+                    <option
+                      key={media.id}
+                      value={media.id}
+                    >
                       {media.name}
                     </option>
                   ))}
@@ -210,52 +263,72 @@ function App() {
                   min="1"
                   max="300"
                   value={syncDuration}
-                  disabled={activeSync !== null}
+                  disabled={
+                    activeSync !== null ||
+                    isSyncStarting
+                  }
                   onChange={(event) =>
-                    setSyncDuration(Number(event.target.value))
+                    setSyncDuration(
+                      Number(event.target.value),
+                    )
                   }
                 />
               </label>
 
-              {activeSync ? (
-                <button
-                  className="stop-sync-button"
-                  type="button"
-                  onClick={handleStopSync}
-                >
-                  Stop Sync
-                </button>
-              ) : (
-                <button
-                  className="start-sync-button"
-                  type="button"
-                  disabled={!effectiveSelectedMediaId}
-                  onClick={handleStartSync}
-                >
-                  Sync All Windows
-                </button>
-              )}
+              <button
+                className="start-sync-button"
+                type="button"
+                disabled={
+                  !effectiveSelectedMediaId ||
+                  activeSync !== null ||
+                  isSyncStarting
+                }
+                onClick={() =>
+                  void handleStartSync()
+                }
+              >
+                {activeSync
+                  ? "Sync in progress"
+                  : isSyncStarting
+                    ? "Starting..."
+                    : "Sync All Windows"}
+              </button>
             </div>
+
+            {syncErrorMessage && (
+              <p role="alert">
+                {syncErrorMessage}
+              </p>
+            )}
           </section>
 
           <section className="windows-section">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">Live preview</p>
+                <p className="eyebrow">
+                  Live preview
+                </p>
+
                 <h2>Display Windows</h2>
               </div>
 
-              <span>{displayWindows.length} windows online</span>
+              <span>
+                {displayWindows.length} windows online
+              </span>
             </div>
 
             <div className="windows-grid">
-              {displayWindows.map((windowData) => (
-                <MediaWindow
-                  key={windowData.id}
-                  windowData={windowData}
-                  syncMedia={activeSync?.media ?? null}
-                />
-              ))}
+              {displayWindows.map(
+                (windowData) => (
+                  <MediaWindow
+                    key={windowData.id}
+                    windowData={windowData}
+                    syncMedia={
+                      activeSync?.media ?? null
+                    }
+                  />
+                ),
+              )}
             </div>
           </section>
         </>

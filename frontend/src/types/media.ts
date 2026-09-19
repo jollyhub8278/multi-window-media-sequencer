@@ -14,3 +14,11 @@ export interface DisplayWindow {
   playlist: MediaItem[];
   cycleDurationSeconds: number;
 }
+
+export interface SyncPlayback {
+  id: string;
+  media: MediaItem;
+  durationSeconds: number;
+  startsAt: string;
+  endsAt: string;
+}
