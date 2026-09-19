@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/jollyhub8278/multi-window-media-sequencer/backend/internal/models"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -23,10 +24,10 @@ func New(database *mongo.Database) *Repository {
 }
 
 func (repository *Repository) GetAllMedia(
-	context context.Context,
+	requestContext context.Context,
 ) ([]models.Media, error) {
 	cursor, err := repository.mediaCollection.Find(
-		context,
+		requestContext,
 		bson.M{},
 	)
 	if err != nil {
@@ -34,12 +35,15 @@ func (repository *Repository) GetAllMedia(
 	}
 
 	defer func() {
-		_ = cursor.Close(context)
+		_ = cursor.Close(requestContext)
 	}()
 
 	var mediaItems []models.Media
 
-	if err := cursor.All(context, &mediaItems); err != nil {
+	if err := cursor.All(
+		requestContext,
+		&mediaItems,
+	); err != nil {
 		return nil, err
 	}
 
@@ -51,10 +55,10 @@ func (repository *Repository) GetAllMedia(
 }
 
 func (repository *Repository) GetAllWindows(
-	context context.Context,
+	requestContext context.Context,
 ) ([]models.DisplayWindow, error) {
 	cursor, err := repository.windowCollection.Find(
-		context,
+		requestContext,
 		bson.M{},
 	)
 	if err != nil {
@@ -62,12 +66,15 @@ func (repository *Repository) GetAllWindows(
 	}
 
 	defer func() {
-		_ = cursor.Close(context)
+		_ = cursor.Close(requestContext)
 	}()
 
 	var displayWindows []models.DisplayWindow
 
-	if err := cursor.All(context, &displayWindows); err != nil {
+	if err := cursor.All(
+		requestContext,
+		&displayWindows,
+	); err != nil {
 		return nil, err
 	}
 
@@ -76,4 +83,60 @@ func (repository *Repository) GetAllWindows(
 	}
 
 	return displayWindows, nil
+}
+
+func (repository *Repository) GetMediaByID(
+	requestContext context.Context,
+	mediaID bson.ObjectID,
+) (models.Media, error) {
+	var media models.Media
+
+	err := repository.mediaCollection.FindOne(
+		requestContext,
+		bson.M{"_id": mediaID},
+	).Decode(&media)
+
+	return media, err
+}
+
+func (repository *Repository) AddPlaylistItem(
+	requestContext context.Context,
+	windowID bson.ObjectID,
+	mediaID bson.ObjectID,
+	displayDuration int,
+) (models.PlaylistItem, error) {
+	var displayWindow models.DisplayWindow
+
+	err := repository.windowCollection.FindOne(
+		requestContext,
+		bson.M{"_id": windowID},
+	).Decode(&displayWindow)
+	if err != nil {
+		return models.PlaylistItem{}, err
+	}
+
+	playlistItem := models.PlaylistItem{
+		ID:              bson.NewObjectID(),
+		MediaID:         mediaID,
+		Position:        len(displayWindow.Playlist),
+		DisplayDuration: displayDuration,
+	}
+
+	_, err = repository.windowCollection.UpdateOne(
+		requestContext,
+		bson.M{"_id": windowID},
+		bson.M{
+			"$push": bson.M{
+				"playlist": playlistItem,
+			},
+			"$set": bson.M{
+				"updated_at": time.Now().UTC(),
+			},
+		},
+	)
+	if err != nil {
+		return models.PlaylistItem{}, err
+	}
+
+	return playlistItem, nil
 }

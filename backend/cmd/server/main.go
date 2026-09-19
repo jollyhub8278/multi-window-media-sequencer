@@ -89,6 +89,10 @@ func main() {
 
 	api.GET("/media", apiHandler.GetMedia)
 	api.GET("/windows", apiHandler.GetWindows)
+	api.POST(
+		"/windows/:windowId/playlist-items",
+		apiHandler.AddPlaylistItem,
+	)
 
 	port := os.Getenv("PORT")
 	if port == "" {

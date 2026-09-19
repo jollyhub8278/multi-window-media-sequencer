@@ -2,11 +2,14 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sort"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/jollyhub8278/multi-window-media-sequencer/backend/internal/models"
 	"github.com/jollyhub8278/multi-window-media-sequencer/backend/internal/repository"
@@ -166,5 +169,109 @@ func (handler *APIHandler) GetWindows(
 	ginContext.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data":    response,
+	})
+}
+
+type AddPlaylistItemRequest struct {
+	MediaID string `json:"mediaId" binding:"required"`
+
+	DisplayDuration int `json:"displayDuration" binding:"omitempty,min=1,max=86400"`
+}
+
+func (handler *APIHandler) AddPlaylistItem(
+	ginContext *gin.Context,
+) {
+	windowID, err := bson.ObjectIDFromHex(
+		ginContext.Param("windowId"),
+	)
+	if err != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Invalid window ID",
+		})
+		return
+	}
+
+	var request AddPlaylistItemRequest
+
+	if err := ginContext.ShouldBindJSON(&request); err != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "A valid media ID and duration are required",
+		})
+		return
+	}
+
+	mediaID, err := bson.ObjectIDFromHex(request.MediaID)
+	if err != nil {
+		ginContext.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Invalid media ID",
+		})
+		return
+	}
+
+	requestContext, cancel := context.WithTimeout(
+		ginContext.Request.Context(),
+		10*time.Second,
+	)
+	defer cancel()
+
+	media, err := handler.repository.GetMediaByID(
+		requestContext,
+		mediaID,
+	)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		ginContext.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"message": "Media not found",
+		})
+		return
+	}
+
+	if err != nil {
+		ginContext.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "Failed to check media",
+		})
+		return
+	}
+
+	duration := request.DisplayDuration
+	if duration <= 0 {
+		duration = media.DefaultDuration
+	}
+
+	playlistItem, err := handler.repository.AddPlaylistItem(
+		requestContext,
+		windowID,
+		mediaID,
+		duration,
+	)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		ginContext.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"message": "Display window not found",
+		})
+		return
+	}
+
+	if err != nil {
+		ginContext.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "Failed to update playlist",
+		})
+		return
+	}
+
+	ginContext.JSON(http.StatusCreated, gin.H{
+		"success": true,
+		"message": "Media added to playlist",
+		"data": gin.H{
+			"id":              playlistItem.ID.Hex(),
+			"mediaId":         mediaID.Hex(),
+			"position":        playlistItem.Position,
+			"displayDuration": playlistItem.DisplayDuration,
+		},
 	})
 }

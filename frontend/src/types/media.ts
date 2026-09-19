@@ -12,4 +12,5 @@ export interface DisplayWindow {
   id: string;
   name: string;
   playlist: MediaItem[];
+  cycleDurationSeconds: number;
 }
