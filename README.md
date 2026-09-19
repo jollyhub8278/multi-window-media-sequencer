@@ -1,5 +1,8 @@
 # Multi-Window Media Sequencer
 
+<!-- <img width="1842" height="853" alt="image" src="https://github.com/user-attachments/assets/c39e24eb-e549-408f-96fb-7a5881a6995a" /> -->
+<img width="1817" height="847" alt="image" src="https://github.com/user-attachments/assets/b405cca8-3ea1-493e-94cc-80f90917dea7" />
+
 A full stack media playback dashboard where multiple display windows run independent playlists and can temporarily show synchronized media.
 
 ## Live URLs
