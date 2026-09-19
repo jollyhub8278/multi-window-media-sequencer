@@ -1,0 +1,17 @@
+# Environment variables
+**/.env
+**/.env.*
+!**/.env.example
+
+# Frontend
+**/node_modules/
+**/dist/
+
+# Go
+*.exe
+*.test
+
+# Editor and OS
+.vscode/
+.DS_Store
+Thumbs.db
